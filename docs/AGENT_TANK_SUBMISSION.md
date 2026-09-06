@@ -1,24 +1,22 @@
 # FlowBond — Agent Tank Submission Package
 
-This document contains paste-ready copy for the Agent Tank form. It is written for the current FlowBond prototype and does not claim live escrow, live payments, or a deployed FlowBond Intelligent Contract.
-
 ## Recommended track
 
 **Future of Work**
 
-Secondary fit: **Autonomous Protocols**. Use Future of Work as the primary track because the project is about verified work, outcome-based settlement, and accountable collaboration between autonomous agents.
+Secondary fit: **Autonomous Protocols**.
 
 ## Project name
 
 FlowBond
 
-## One-line summary — under 180 characters
+## One-line summary
 
-Evidence-led settlement rails for autonomous agents: define a service promise, verify proof, pause disputes, and release payment only after the agreed outcome.
+Evidence-led settlement rails for autonomous agents: define a service promise, verify proof, pause disputes, and prepare release only after the agreed outcome.
 
-## Project overview — under 1000 characters
+## Project overview
 
-FlowBond is a trust and settlement layer for agent-to-agent work. A buyer agent defines a machine-checkable service promise, budget cap, and evidence criteria before a seller agent starts. The prototype then walks through Agreement, Evidence, Decision, and Settlement states: evidence can be inspected, a dispute can pause the stream, and a verified outcome can prepare a release. GenLayer is the planned adjudication layer for cases where evidence is external, semantic, or contested, using web-aware Intelligent Contracts and independent validator consensus rather than a single opaque decision. This submission is an honest frontend prototype: the Agreement Builder and state transitions are live in the demo, while wallet custody, production escrow, and a deployed FlowBond contract remain planned.
+FlowBond is a trust and settlement layer for agent-to-agent work. A buyer agent defines a machine-checkable service promise, budget cap, and evidence criteria before a seller agent starts. The prototype walks through Agreement, Evidence, Decision, and Settlement-readiness states. The deployed FlowBond Intelligent Contract accepts a public evidence URI, uses consensus-backed review to classify evidence as ACCEPTED, REVISION_REQUESTED, or OUT_OF_SCOPE, and supports dispute pause and close operations. The contract does not custody or transfer funds: RELEASE_READY means accepted evidence is ready for a future settlement adapter. The frontend is a live prototype; wallet connection and live payment movement remain future integrations.
 
 ## Website
 
@@ -26,49 +24,40 @@ https://flowbondmvp-cdeq9txu.manus.space
 
 ## GitHub repository
 
-Create a separate public repository named `flowbond-agent-tank`. Do not submit the MilestoneJury repository. The repository must belong to the GitHub account linked to the GenLayer Portal.
-
-## How-to instructions
-
-### Step 1 — Open the live prototype
-
-Open the FlowBond website and select **New agreement** in the hero section.
-
-### Step 2 — Define the promise
-
-Enter a service promise, buyer agent, seller agent, budget cap, and evidence criteria in the Prototype Builder. Select **Stage agreement**.
-
-### Step 3 — Inspect the agreement state
-
-Confirm that the dashboard returns to the Agreement state and displays the evidence-led service agreement flow. The interface should visibly show the prototype/no-live-funds disclosure.
-
-### Step 4 — Explore the verification path
-
-Use the Agreement, Evidence, and Decision sections to inspect the intended lifecycle. The current build demonstrates the interaction model; it does not move real funds or claim production escrow custody.
-
-## Expected verification outcome — under 500 characters
-
-The steward should see a live FlowBond dashboard with a New agreement action. After entering the service promise, agent identities, budget, and evidence criteria, selecting Stage agreement closes the builder, returns to the Agreement state, and shows a prototype confirmation. The page clearly states that no live funds move. Evidence, Decision, dispute pause, and settlement release are presented as prototype states.
-
-## Demo video
-
-Optional. If a YouTube demo is ready, show the exact path above and keep the on-screen labels honest: Prototype Builder, Prototype state, and No live funds.
+https://github.com/0ogodboyo0/flowbond-agent-tank
 
 ## Contract link
 
-Leave the contract link empty for this submission unless a separate FlowBond Intelligent Contract is deployed and publicly verifiable. Do not use MilestoneJury deployment links as FlowBond evidence.
+https://explorer-studio.genlayer.com/address/0x0dfaDED3B4e50ea6825E8e459804E430C2E097B8
+
+## How-to instructions
+
+1. Open the FlowBond website and select **New agreement**.
+2. Enter a service promise, buyer agent, seller agent, budget cap, and evidence criteria.
+3. Select **Stage agreement** and inspect the Agreement state.
+4. Use the Evidence, Decision, and dispute sections to inspect the intended lifecycle.
+5. Review the deployed contract and evidence brief through the public GitHub repository and Explorer link above.
+
+## Expected verification outcome
+
+The steward should see a public FlowBond prototype with an Agreement Builder and an evidence-led lifecycle. The public repository contains the FlowBond contract source and an evidence brief. The Explorer link shows the deployed FlowBond Intelligent Contract, which records agreement, evidence, consensus-backed decision, dispute, and settlement-readiness states. The project clearly discloses that no funds move and that the frontend wallet connection remains a future integration.
+
+## Scope disclosure
+
+FlowBond is not claiming production escrow, live wallet connection, autonomous payment movement, or custody of funds. The deployed contract is a state machine and adjudication layer. `RELEASE_READY` is a readiness state for a future settlement adapter, not a payment or escrow release.
 
 ## Submission checklist
 
-| Item | Status | Action |
-|---|---:|---|
-| Track | Ready | Select Future of Work |
-| Public GitHub repository | Needed | Create `flowbond-agent-tank` under the linked GitHub account |
-| Logo | Ready | Upload the FlowBond mark as PNG, JPEG, or WebP within the portal limits |
-| One-liner | Ready | Paste the one-line summary above |
-| Overview | Ready | Paste the overview above |
-| Website | Ready | Paste the live FlowBond URL |
-| How-to | Ready | Add the four steps above |
-| Expected outcome | Ready | Paste the verification outcome above |
-| YouTube | Optional | Add only if the demo is recorded |
-| Contract link | Not applicable yet | Leave empty unless FlowBond has its own deployment |
+| Item | Status |
+|---|---:|
+| Track | Ready — Future of Work |
+| Project name | Ready — FlowBond |
+| Website | Ready |
+| Public GitHub repository | Ready |
+| Contract link | Ready — GenLayer Explorer |
+| One-line summary | Ready |
+| Project overview | Ready |
+| How-to instructions | Ready |
+| Expected verification outcome | Ready |
+| Logo | Upload FlowBond mark |
+| YouTube demo | Optional |
