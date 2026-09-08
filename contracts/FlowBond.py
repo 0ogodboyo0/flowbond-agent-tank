@@ -3,7 +3,7 @@
 """FlowBond agreement state machine.
 
 This contract records agreement, evidence, consensus-backed decision, dispute,
-and settlement readiness. It deliberately does not custody or transfer funds.
+settlement readiness, and GEN testnet funding. It does not pay out to sellers.
 """
 from genlayer import *
 
@@ -21,6 +21,7 @@ class FlowBond(gl.Contract):
     decision_reason: str
     dispute_reason: str
     settlement_status: str
+    funded_amount: u256
 
     def __init__(self, service_promise: str, buyer_agent: str, seller_agent: str,
                  budget_cap: str, evidence_criteria: str):
@@ -42,10 +43,19 @@ class FlowBond(gl.Contract):
         self.decision_reason = "Evidence has not been submitted."
         self.dispute_reason = ""
         self.settlement_status = "LOCKED"
+        self.funded_amount = u256(0)
 
     def _require_owner(self):
         if gl.message.sender_address != self.owner:
             raise gl.vm.UserError("Only the contract owner can update this agreement")
+
+    @gl.public.write.payable
+    def fund_agreement(self) -> str:
+        if gl.message.value == u256(0):
+            raise gl.vm.UserError("Send some GEN to fund the testnet agreement")
+        self.funded_amount = self.funded_amount + gl.message.value
+        self.settlement_status = "FUNDED_TESTNET"
+        return "FUNDED_TESTNET"
 
     @gl.public.write
     def submit_evidence(self, evidence_uri: str, summary: str) -> str:
@@ -132,4 +142,5 @@ The response must contain no other label.
             "decision_reason": self.decision_reason,
             "dispute_reason": self.dispute_reason,
             "settlement_status": self.settlement_status,
+            "funded_amount_wei": str(self.funded_amount),
         }

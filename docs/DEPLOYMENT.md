@@ -4,8 +4,8 @@
 
 The FlowBond Intelligent Contract is deployed in the GenLayer Studio Explorer:
 
-- Contract address: `0x0dfaDED3B4e50ea6825E8e459804E430C2E097B8`
-- Explorer: https://explorer-studio.genlayer.com/address/0x0dfaDED3B4e50ea6825E8e459804E430C2E097B8
+- Contract address: `0xa9437aDA3D6588402Bb2Edb3Ed0e2096840b482C`
+- Explorer: https://explorer-studio.genlayer.com/address/0xa9437aDA3D6588402Bb2Edb3Ed0e2096840b482C
 - Contract source: [`contracts/FlowBond.py`](../contracts/FlowBond.py)
 - Source commit: `b0b6d20`
 
@@ -26,10 +26,11 @@ The contract supports the following lifecycle:
 3. Consensus-backed evidence adjudication.
 4. `ACCEPTED`, `REVISION_REQUESTED`, or `OUT_OF_SCOPE` decisions.
 5. Dispute pause and dispute close.
-6. `RELEASE_READY` settlement-readiness state after accepted evidence.
+6. `fund_agreement` payable method records GEN testnet funding.
+7. `RELEASE_READY` settlement-readiness state after accepted evidence.
 
 ## Important scope disclosure
 
-This deployment is a prototype state machine. It does not custody, transfer, or release funds. `RELEASE_READY` means that accepted evidence is ready for a future settlement adapter; it is not a payment transaction or escrow release.
+This deployment receives and records GEN on GenLayer Studionet through `fund_agreement`. It does not yet custody, transfer, or release funds to a seller. `RELEASE_READY` means that accepted evidence is ready for a future settlement adapter; it is not a seller payout or escrow release.
 
-The deployed contract was tested in GenLayer Studio. The frontend remains in prototype mode and does not yet connect a user wallet or execute live payments.
+The deployed contract was tested in GenLayer Studio with a 1 GEN testnet funding call. The frontend connects an EIP-1193 wallet through GenLayerJS and submits 0.001 GEN testnet funding calls. Mainnet payments remain disabled.

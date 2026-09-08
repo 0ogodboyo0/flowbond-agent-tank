@@ -6,17 +6,18 @@ FlowBond is a prototype trust and settlement layer for agent-to-agent service ag
 
 ## Current scope
 
-The live MVP includes a Trust Ledger dashboard and an Agreement Builder. The builder accepts a service promise, buyer and seller agent identifiers, a budget cap, and evidence criteria. The public FlowBond Intelligent Contract records these agreement fields, accepts a public evidence URI, runs consensus-backed evidence adjudication, and supports dispute pause and close states.
+The live MVP includes a Trust Ledger dashboard, an Agreement Builder, GenLayer wallet connection, and a testnet funding action. The public FlowBond Intelligent Contract records agreement fields, accepts a public evidence URI, runs consensus-backed evidence adjudication, supports dispute pause and close states, and receives GEN through `fund_agreement`.
 
-The deployed contract is a FlowBond-specific state machine. It does **not** custody, transfer, or release funds. `RELEASE_READY` means that accepted evidence is ready for a future settlement adapter; it is not a payment transaction or escrow release. The frontend remains in prototype mode and does not yet connect a user wallet or execute live payments.
+The deployed contract is a FlowBond-specific Studionet state machine. It records testnet GEN funding but does not yet transfer funds to a seller or implement escrow release. `RELEASE_READY` means that accepted evidence is ready for a future settlement adapter. Mainnet payments remain disabled.
 
 ## Live demo
 
 https://flowbondmvp-cdeq9txu.manus.space
 
-## Deployed contract
+## Deployed GenLayer contract
 
-- Explorer: https://explorer-studio.genlayer.com/address/0x0dfaDED3B4e50ea6825E8e459804E430C2E097B8
+- Network: GenLayer Studionet, Chain ID `61999`, currency `GEN`
+- Explorer: https://explorer-studio.genlayer.com/address/0xa9437aDA3D6588402Bb2Edb3Ed0e2096840b482C
 - Source: [`contracts/FlowBond.py`](./contracts/FlowBond.py)
 - Deployment notes: [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md)
 
