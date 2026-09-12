@@ -4,8 +4,8 @@
 
 The FlowBond Intelligent Contract is deployed in the GenLayer Studio Explorer:
 
-- Contract address: `0xa9437aDA3D6588402Bb2Edb3Ed0e2096840b482C`
-- Explorer: https://explorer-studio.genlayer.com/address/0xa9437aDA3D6588402Bb2Edb3Ed0e2096840b482C
+- Contract address: `0x1Ae16B9E32eeFd1b604E9836886884A16F4aAC11`
+- Explorer: https://explorer-studio.genlayer.com/address/0x1Ae16B9E32eeFd1b604E9836886884A16F4aAC11
 - Contract source: [`contracts/FlowBond.py`](../contracts/FlowBond.py)
 - Source commit: `b0b6d20`
 

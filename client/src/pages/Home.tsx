@@ -17,7 +17,7 @@ const heroImage = "/manus-storage/flowbond-hero-reference_64581207.png";
 const evidenceImage = "/manus-storage/flowbond-evidence-card_8cb65775.png";
 const horizonImage = "/manus-storage/flowbond-settlement-horizon_f549f034.png";
 const markImage = "/manus-storage/flowbond-mark_c4dfc9a2.png";
-const FLOWBOND_CONTRACT = "0xa9437aDA3D6588402Bb2Edb3Ed0e2096840b482C" as `0x${string}`;
+const FLOWBOND_CONTRACT = "0x1Ae16B9E32eeFd1b604E9836886884A16F4aAC11" as `0x${string}`;
 
 type EvidenceStatus = "verified" | "pending" | "attention";
 

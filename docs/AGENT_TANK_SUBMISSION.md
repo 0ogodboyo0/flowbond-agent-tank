@@ -28,7 +28,7 @@ https://github.com/0ogodboyo0/flowbond-agent-tank
 
 ## Contract link
 
-https://explorer-studio.genlayer.com/address/0xa9437aDA3D6588402Bb2Edb3Ed0e2096840b482C
+https://explorer-studio.genlayer.com/address/0x1Ae16B9E32eeFd1b604E9836886884A16F4aAC11
 
 ## How-to instructions
 
