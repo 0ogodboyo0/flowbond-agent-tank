@@ -54,6 +54,53 @@ export default function Home() {
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [walletBusy, setWalletBusy] = useState(false);
   const [testnetTx, setTestnetTx] = useState<string | null>(null);
+  const [agreement, setAgreement] = useState<any | null>(null);
+  const [agreementLoading, setAgreementLoading] = useState(true);
+  const [agreementError, setAgreementError] = useState<string | null>(null);
+
+  const loadAgreement = async () => {
+    setAgreementLoading(true);
+    setAgreementError(null);
+
+    try {
+      const client = createClient({ chain: studionet });
+
+      const raw = await (client as any).readContract({
+        address: FLOWBOND_CONTRACT,
+        functionName: "get_agreement",
+        args: [],
+      });
+
+      const value = Array.isArray(raw)
+        ? {
+            service_promise: raw[0],
+            buyer_agent: raw[1],
+            seller_agent: raw[2],
+            budget_cap: raw[3],
+            evidence_criteria: raw[4],
+            evidence_uri: raw[5],
+            evidence_summary: raw[6],
+            decision: raw[7],
+            decision_reason: raw[8],
+            dispute_reason: raw[9],
+            settlement_status: raw[10],
+            dispute_status: raw[11],
+            funded_amount_wei: raw[12],
+          }
+        : raw;
+
+      if (!value) throw new Error("Empty FlowBond agreement.");
+
+      setAgreement(value);
+    } catch (e) {
+      setAgreementError(
+        e instanceof Error ? e.message : "Unable to read FlowBond."
+      );
+    } finally {
+      setAgreementLoading(false);
+    }
+  };
+
   const [draft, setDraft] = useState({ promise: "", buyer: "", seller: "", budget: "480", criteria: "Schema compliance, integration tests" });
   const current = statusCopy[streamState];
 
@@ -105,7 +152,7 @@ export default function Home() {
 
   const copyAddress = () => {
     setCopied(true);
-    toast.success("Agreement reference copied", { description: "0x7a2e...a91c is ready to share." });
+    toast.success("Agreement reference copied", { description: "{FLOWBOND_CONTRACT.slice(0, 6)}...{FLOWBOND_CONTRACT.slice(-4)} is ready to share." });
     window.setTimeout(() => setCopied(false), 1800);
   };
 
@@ -115,6 +162,10 @@ export default function Home() {
     setCreateOpen(false);
     toast.success("Agreement staged", { description: "Connect a GenLayer wallet to fund this agreement with test GEN." });
   };
+
+  useEffect(() => {
+    void loadAgreement();
+  }, []);
 
   useEffect(() => {
     const ethereum = getWallet();
@@ -151,7 +202,46 @@ export default function Home() {
     ethereum.on?.("accountsChanged", onAccountsChanged);
     ethereum.on?.("chainChanged", onChainChanged);
 
-    return () => {
+    
+{agreementError && (
+  <div className="rounded-lg border border-coral/30 bg-coral/10 p-4">
+    <p className="meta-label text-coral">Contract read error</p>
+    <p className="mt-2 text-xs text-white/60">{agreementError}</p>
+  </div>
+)}
+
+<div className="mt-4 grid gap-3 sm:grid-cols-2">
+  <div className="rounded-lg border border-white/10 p-4">
+    <p className="meta-label">On-chain decision</p>
+    <p className="mt-2 font-mono text-sm text-chartreuse">
+      {agreementLoading ? "LOADING..." : agreement?.decision || "PENDING"}
+    </p>
+    <p className="mt-1 text-xs text-white/45">
+      {agreement?.decision_reason || "Waiting for evidence."}
+    </p>
+  </div>
+
+  <div className="rounded-lg border border-white/10 p-4">
+    <p className="meta-label">Settlement status</p>
+    <p className="mt-2 font-mono text-sm text-chartreuse">
+      {agreement?.settlement_status || "LOCKED"}
+    </p>
+    <p className="mt-1 text-xs text-white/45">
+      Dispute: {agreement?.dispute_status || "OPEN"}
+    </p>
+  </div>
+
+  <div className="rounded-lg border border-white/10 p-4 sm:col-span-2">
+    <p className="meta-label">Funded amount</p>
+    <p className="mt-2 font-mono text-sm text-bone">
+      {agreement?.funded_amount_wei != null
+        ? `${Number(agreement.funded_amount_wei) / 1e18} GEN`
+        : "0 GEN"}
+    </p>
+  </div>
+</div>
+
+return () => {
       ethereum.removeListener?.("accountsChanged", onAccountsChanged);
       ethereum.removeListener?.("chainChanged", onChainChanged);
     };
@@ -327,14 +417,14 @@ export default function Home() {
           <div className="mt-8 space-y-6">
             {[{num:"01", label:"Agreement", active: activeTab === "agreement", action: () => setActiveTab("agreement")}, {num:"02", label:"Evidence", active: activeTab === "evidence", action: () => setActiveTab("evidence")}, {num:"03", label:"Decision", active: activeTab === "decision", action: () => setActiveTab("decision")}].map((item) => <button key={item.num} onClick={item.action} className={`flex w-full items-start gap-3 text-left transition-colors ${item.active ? "text-chartreuse" : "text-white/35 hover:text-white/70"}`}><span className="font-mono text-[10px]">{item.num}</span><span className="font-display text-sm font-bold">{item.label}</span></button>)}
           </div>
-          <div className="mt-20 border-t border-white/10 pt-5"><p className="font-mono text-[9px] uppercase tracking-[0.2em] text-white/35">Agreement reference</p><button onClick={copyAddress} className="mt-3 flex items-center gap-2 font-mono text-xs text-white/65 hover:text-chartreuse">0x7a2e...a91c {copied ? <Check size={13} className="text-chartreuse" /> : <Copy size={13} />}</button></div>
+          <div className="mt-20 border-t border-white/10 pt-5"><p className="font-mono text-[9px] uppercase tracking-[0.2em] text-white/35">Agreement reference</p><button onClick={copyAddress} className="mt-3 flex items-center gap-2 font-mono text-xs text-white/65 hover:text-chartreuse">{FLOWBOND_CONTRACT.slice(0, 6)}...{FLOWBOND_CONTRACT.slice(-4)} {copied ? <Check size={13} className="text-chartreuse" /> : <Copy size={13} />}</button></div>
         </aside>
 
         <div className="min-w-0">
           <div className="mb-6 flex items-end justify-between gap-4"><div><p className="font-mono text-[9px] uppercase tracking-[0.25em] text-chartreuse">01 / Agreement state</p><h2 className="mt-2 font-display text-3xl font-bold tracking-[-0.04em] text-bone sm:text-4xl">The promise, made legible.</h2></div><span className={`hidden rounded-full border px-3 py-1.5 font-mono text-[9px] uppercase tracking-[0.15em] sm:inline-flex ${streamState === "paused" ? "border-coral/40 bg-coral/10 text-coral" : "border-chartreuse/35 bg-chartreuse/10 text-chartreuse"}`}>{current.label}</span></div>
           <div className="relative overflow-hidden rounded-xl border border-white/10 bg-ocean/70 p-5 shadow-2xl shadow-black/20 sm:p-7">
             <div className="absolute right-0 top-0 h-32 w-32 bg-[radial-gradient(circle,rgba(199,243,107,0.12),transparent_65%)]" />
-            {activeTab === "agreement" && <div className="relative"><div className="grid gap-8 sm:grid-cols-[1fr_0.8fr]"><div><div className="flex items-center gap-3"><div className="grid h-11 w-11 place-items-center rounded-lg border border-chartreuse/30 bg-chartreuse/10 text-chartreuse"><LockKeyhole size={20} /></div><div><p className="font-mono text-[9px] uppercase tracking-[0.2em] text-white/40">Service agreement</p><h3 className="mt-1 font-display text-xl font-bold">API reliability audit</h3></div></div><p className="mt-7 max-w-[470px] text-sm leading-6 text-white/60">“Deliver an API reliability audit with schema checks and reproducible integration tests. Payment continues while the agreed evidence remains green.”</p><div className="mt-7 flex flex-wrap gap-2"><span className="proof-chip"><GitBranch size={12} /> schema / v2.3</span><span className="proof-chip"><ShieldCheck size={12} /> evidence-led</span><span className="proof-chip"><Sparkles size={12} /> GenLayer ready</span></div></div><div className="space-y-5 border-t border-white/10 pt-5 sm:border-l sm:border-t-0 sm:pl-7 sm:pt-0"><div><p className="meta-label">Buyer agent</p><p className="mt-1 font-mono text-sm text-bone">atlas_researcher</p></div><div><p className="meta-label">Seller agent</p><p className="mt-1 font-mono text-sm text-bone">relay_ops_04</p></div><div><p className="meta-label">Budget horizon</p><p className="mt-1 font-display text-2xl font-bold text-chartreuse">$480 <span className="font-mono text-[10px] font-normal text-white/40">USDC / capped</span></p></div></div></div></div>}
+            {activeTab === "agreement" && <div className="relative"><div className="grid gap-8 sm:grid-cols-[1fr_0.8fr]"><div><div className="flex items-center gap-3"><div className="grid h-11 w-11 place-items-center rounded-lg border border-chartreuse/30 bg-chartreuse/10 text-chartreuse"><LockKeyhole size={20} /></div><div><p className="font-mono text-[9px] uppercase tracking-[0.2em] text-white/40">Service agreement</p><h3 className="mt-1 font-display text-xl font-bold">{agreement?.service_promise || "FlowBond agreement"}</h3></div></div><p className="mt-7 max-w-[470px] text-sm leading-6 text-white/60">“Deliver an {agreement?.service_promise || "FlowBond agreement"} with schema checks and reproducible integration tests. Payment continues while the agreed evidence remains green.”</p><div className="mt-7 flex flex-wrap gap-2"><span className="proof-chip"><GitBranch size={12} /> schema / v2.3</span><span className="proof-chip"><ShieldCheck size={12} /> evidence-led</span><span className="proof-chip"><Sparkles size={12} /> GenLayer ready</span></div></div><div className="space-y-5 border-t border-white/10 pt-5 sm:border-l sm:border-t-0 sm:pl-7 sm:pt-0"><div><p className="meta-label">Buyer agent</p><p className="mt-1 font-mono text-sm text-bone">{agreement?.buyer_agent || "—"}</p></div><div><p className="meta-label">Seller agent</p><p className="mt-1 font-mono text-sm text-bone">{agreement?.seller_agent || "—"}</p></div><div><p className="meta-label">Budget horizon</p><p className="mt-1 font-display text-2xl font-bold text-chartreuse">{agreement?.budget_cap || "—"} <span className="font-mono text-[10px] font-normal text-white/40">USDC / capped</span></p></div></div></div></div>}
             {activeTab === "evidence" && <div className="relative"><div className="grid gap-6 sm:grid-cols-[1fr_0.85fr]"><div><p className="meta-label">Collected evidence / 04 signals</p><div className="mt-4 space-y-2">{evidence.map((item) => { const Icon = item.icon; return <div key={item.title} className="flex items-center gap-3 rounded-lg border border-white/8 bg-black/10 px-3 py-3"><div className={`grid h-8 w-8 place-items-center rounded-md ${item.status === "verified" ? "bg-chartreuse/10 text-chartreuse" : item.status === "attention" ? "bg-coral/10 text-coral" : "bg-white/8 text-white/45"}`}><Icon size={15} /></div><div className="min-w-0 flex-1"><p className="text-sm font-medium text-bone">{item.title}</p><p className="mt-0.5 truncate text-xs text-white/45">{item.detail}</p></div><span className="font-mono text-[9px] uppercase tracking-[0.15em] text-white/35">{item.status}</span></div>})}</div></div><div className="overflow-hidden rounded-lg border border-white/10 bg-ink"><img src={evidenceImage} alt="Abstract evidence review card" className="h-full min-h-[220px] w-full object-cover opacity-90" /></div></div></div>}
             {activeTab === "decision" && <div className="relative"><div className="grid gap-8 sm:grid-cols-[0.9fr_1.1fr]"><div><p className="meta-label">Decision preview</p><div className={`mt-4 flex items-center gap-3 rounded-lg border p-4 ${streamState === "paused" ? "border-coral/35 bg-coral/10" : "border-chartreuse/35 bg-chartreuse/10"}`}><div className={`grid h-11 w-11 place-items-center rounded-full ${streamState === "paused" ? "bg-coral text-ink" : "bg-chartreuse text-ink"}`}>{streamState === "paused" ? <Pause size={18} /> : <Check size={18} />}</div><div><p className="font-display text-xl font-bold">{current.label}</p><p className="mt-1 text-xs text-white/55">{current.description}</p></div></div><div className="mt-6 flex flex-wrap gap-2"><button onClick={() => changeState("locked")} className="state-button"><LockKeyhole size={13} /> Lock</button><button onClick={() => changeState("paused")} className="state-button"><Pause size={13} /> Pause</button><button onClick={() => changeState("released")} className="state-button"><Play size={13} /> Release preview</button></div></div><div className="flex min-h-[240px] items-center justify-center rounded-lg border border-white/10 bg-ink/80 p-4"><img src={horizonImage} alt="FlowBond settlement horizon" className="max-h-[240px] w-full object-cover opacity-90" /></div></div><div className="mt-8 border-t border-white/10 pt-5"><p className="font-mono text-[10px] uppercase tracking-[0.15em] text-white/45">GenLayer testnet boundary</p><p className="mt-2 text-sm leading-6 text-white/55">Wallet connection and GEN funding use GenLayer Studionet. Mainnet, escrow release, and production settlement remain disabled.</p></div></div>}
           </div>
@@ -348,7 +438,7 @@ export default function Home() {
             <button onClick={sendTestnetPayment} disabled={walletBusy} className="mt-4 inline-flex items-center gap-2 rounded-md bg-chartreuse px-4 py-3 font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-ink disabled:opacity-60"><WalletCards size={14} /> {walletAddress ? "Fund with 0.001 GEN" : "Connect GenLayer wallet"}</button>
             {testnetTx && <a className="mt-3 block truncate font-mono text-[9px] text-chartreuse underline" href={`https://explorer-studio.genlayer.com/tx/${testnetTx}`} target="_blank" rel="noreferrer">View GenLayer transaction</a>}
           </div>
-          <div className="rounded-xl border border-white/10 bg-bone p-5 text-ink"><div className="flex items-center justify-between"><p className="font-mono text-[9px] uppercase tracking-[0.22em] text-ink/55">Settlement horizon</p><span className="h-2 w-2 rounded-full bg-chartreuse shadow-[0_0_0_4px_rgba(199,243,107,0.18)]" /></div><div className="mt-7 flex items-end justify-between"><div><p className="font-mono text-[9px] uppercase tracking-[0.2em] text-ink/50">Locked budget</p><p className="mt-1 font-display text-4xl font-bold tracking-[-0.06em]">$480</p></div><p className="font-mono text-xs text-ink/50">USDC</p></div><div className="mt-6 h-2 overflow-hidden rounded-full bg-ink/10"><div className={`h-full rounded-full bg-ink transition-all duration-500 ${streamState === "paused" ? "w-[42%]" : streamState === "released" ? "w-full" : "w-[68%]"}`} /></div><div className="mt-3 flex justify-between font-mono text-[9px] uppercase tracking-[0.15em] text-ink/45"><span>locked</span><span>{streamState === "paused" ? "paused" : streamState === "released" ? "released" : "evidence"}</span></div><button onClick={() => setActiveTab("decision")} className="mt-7 flex w-full items-center justify-between border-t border-ink/15 pt-4 text-left font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-ink">Open decision path <ArrowUpRight size={15} /></button></div>
+          <div className="rounded-xl border border-white/10 bg-bone p-5 text-ink"><div className="flex items-center justify-between"><p className="font-mono text-[9px] uppercase tracking-[0.22em] text-ink/55">Settlement horizon</p><span className="h-2 w-2 rounded-full bg-chartreuse shadow-[0_0_0_4px_rgba(199,243,107,0.18)]" /></div><div className="mt-7 flex items-end justify-between"><div><p className="font-mono text-[9px] uppercase tracking-[0.2em] text-ink/50">Locked budget</p><p className="mt-1 font-display text-4xl font-bold tracking-[-0.06em]">{agreement?.budget_cap || "—"}</p></div><p className="font-mono text-xs text-ink/50">USDC</p></div><div className="mt-6 h-2 overflow-hidden rounded-full bg-ink/10"><div className={`h-full rounded-full bg-ink transition-all duration-500 ${streamState === "paused" ? "w-[42%]" : streamState === "released" ? "w-full" : "w-[68%]"}`} /></div><div className="mt-3 flex justify-between font-mono text-[9px] uppercase tracking-[0.15em] text-ink/45"><span>locked</span><span>{streamState === "paused" ? "paused" : streamState === "released" ? "released" : "evidence"}</span></div><button onClick={() => setActiveTab("decision")} className="mt-7 flex w-full items-center justify-between border-t border-ink/15 pt-4 text-left font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-ink">Open decision path <ArrowUpRight size={15} /></button></div>
           <div className="rounded-xl border border-white/10 bg-ocean/80 p-5"><p className="font-mono text-[9px] uppercase tracking-[0.22em] text-white/40">Why FlowBond</p><h3 className="mt-3 font-display text-2xl font-bold leading-tight">Make the promise machine-checkable.</h3><p className="mt-3 text-sm leading-6 text-white/55">Agents can call APIs and move money. FlowBond gives them a shared language for proof, pause, and accountable settlement.</p><a href="#agreement" className="mt-6 inline-flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.16em] text-chartreuse hover:underline">Read the agreement <ChevronRight size={14} /></a></div>
         </aside>
         </div>
