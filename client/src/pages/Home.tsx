@@ -58,9 +58,7 @@ export default function Home() {
   const [agreementLoading, setAgreementLoading] = useState(true);
   const [agreementError, setAgreementError] = useState<string | null>(null);
 
-  const [agreement, setAgreement] = useState<any | null>(null);
-  const [agreementLoading, setAgreementLoading] = useState(true);
-  const [agreementError, setAgreementError] = useState<string | null>(null);
+
 
   const loadAgreement = async () => {
     setAgreementLoading(true);
@@ -113,44 +111,7 @@ export default function Home() {
   const getWallet = () => window.ethereum;
 
 
-const loadAgreement = async () => {
-  setAgreementLoading(true);
-  setAgreementError(null);
-
-  try {
-    const client = createClient({ chain: studionet });
-
-    const raw = await (client as any).readContract({
-      address: FLOWBOND_CONTRACT,
-      functionName: "get_agreement",
-      args: [],
-    });
-
-    const value = Array.isArray(raw) ? {
-      service_promise: raw[0],
-      buyer_agent: raw[1],
-      seller_agent: raw[2],
-      budget_cap: raw[3],
-      evidence_criteria: raw[4],
-      evidence_uri: raw[5],
-      evidence_summary: raw[6],
-      decision: raw[7],
-      decision_reason: raw[8],
-      dispute_reason: raw[9],
-      settlement_status: raw[10],
-      dispute_status: raw[11],
-      funded_amount_wei: raw[12],
-    } : raw;
-
-    setAgreement(value);
-  } catch (e) {
-    setAgreementError(
-      e instanceof Error ? e.message : "Unable to read FlowBond."
-    );
-  } finally {
-    setAgreementLoading(false);
-  }
-};
+;
 
 
 
@@ -252,7 +213,7 @@ const loadAgreement = async () => {
     ethereum.on?.("accountsChanged", onAccountsChanged);
     ethereum.on?.("chainChanged", onChainChanged);
 
-    
+
 {agreementError && (
   <div className="rounded-lg border border-coral/30 bg-coral/10 p-4">
     <p className="meta-label text-coral">Contract read error</p>
@@ -356,33 +317,10 @@ return () => {
         value: BigInt("1000000000000000")
       };
 
-      let estimate: any = undefined;
-
-      try {
-        estimate =
-          await (client as any)
-            .estimateTransactionFeesForWrite?.(write);
-      } catch {
-        // Fee estimation failed; continue without it.
-        estimate = undefined;
-      }
-
-      // Submit exactly once.
-      // Never blindly retry writeContract because the wallet/network
-      // may already have accepted the transaction.
-      const hash = estimate
-        ? String(
-            await client.writeContract({
-              ...write,
-              fees: {
-                distribution: estimate.distribution,
-                feeValue: estimate.feeValue
-              }
-            })
-          )
-        : String(await client.writeContract(write));
-
-      setTestnetTx(hash);
+      const hash = String(
+      await client.writeContract(write)
+    );
+    setTestnetTx(hash);
 
       toast.success(
         "GEN testnet funding submitted",
