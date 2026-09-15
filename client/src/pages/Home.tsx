@@ -58,6 +58,10 @@ export default function Home() {
   const [agreementLoading, setAgreementLoading] = useState(true);
   const [agreementError, setAgreementError] = useState<string | null>(null);
 
+  const [agreement, setAgreement] = useState<any | null>(null);
+  const [agreementLoading, setAgreementLoading] = useState(true);
+  const [agreementError, setAgreementError] = useState<string | null>(null);
+
   const loadAgreement = async () => {
     setAgreementLoading(true);
     setAgreementError(null);
@@ -107,6 +111,48 @@ export default function Home() {
   const verifiedCount = useMemo(() => evidence.filter((item) => item.status === "verified").length, []);
 
   const getWallet = () => window.ethereum;
+
+
+const loadAgreement = async () => {
+  setAgreementLoading(true);
+  setAgreementError(null);
+
+  try {
+    const client = createClient({ chain: studionet });
+
+    const raw = await (client as any).readContract({
+      address: FLOWBOND_CONTRACT,
+      functionName: "get_agreement",
+      args: [],
+    });
+
+    const value = Array.isArray(raw) ? {
+      service_promise: raw[0],
+      buyer_agent: raw[1],
+      seller_agent: raw[2],
+      budget_cap: raw[3],
+      evidence_criteria: raw[4],
+      evidence_uri: raw[5],
+      evidence_summary: raw[6],
+      decision: raw[7],
+      decision_reason: raw[8],
+      dispute_reason: raw[9],
+      settlement_status: raw[10],
+      dispute_status: raw[11],
+      funded_amount_wei: raw[12],
+    } : raw;
+
+    setAgreement(value);
+  } catch (e) {
+    setAgreementError(
+      e instanceof Error ? e.message : "Unable to read FlowBond."
+    );
+  } finally {
+    setAgreementLoading(false);
+  }
+};
+
+
 
   const connectToStudionet = async (requestAccounts = true) => {
     const ethereum = getWallet();
@@ -162,6 +208,10 @@ export default function Home() {
     setCreateOpen(false);
     toast.success("Agreement staged", { description: "Connect a GenLayer wallet to fund this agreement with test GEN." });
   };
+
+  useEffect(() => {
+    void loadAgreement();
+  }, []);
 
   useEffect(() => {
     void loadAgreement();
