@@ -1,5 +1,5 @@
 // FlowBond style reminder: Trust Ledger design; evidence before assertion, editorial hierarchy, split-rail composition, chartreuse verified states, coral disputes, and no fabricated live settlement.
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ArrowUpRight, Check, ChevronRight, CircleAlert, Clock3, Copy, FileCheck2, GitBranch, LockKeyhole, Menu, Pause, Play, ShieldCheck, Sparkles, WalletCards, X } from "lucide-react";
 import { toast } from "sonner";
 import { createClient } from "genlayer-js";
@@ -9,6 +9,8 @@ declare global {
   interface Window {
     ethereum?: {
       request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
+      on?: (event: string, handler: (...args: any[]) => void) => void;
+      removeListener?: (event: string, handler: (...args: any[]) => void) => void;
     };
   }
 }
@@ -18,6 +20,8 @@ const evidenceImage = "/manus-storage/flowbond-evidence-card_8cb65775.png";
 const horizonImage = "/manus-storage/flowbond-settlement-horizon_f549f034.png";
 const markImage = "/manus-storage/flowbond-mark_c4dfc9a2.png";
 const FLOWBOND_CONTRACT = "0x1Ae16B9E32eeFd1b604E9836886884A16F4aAC11" as `0x${string}`;
+const STUDIONET_CHAIN_ID = "0xf22f"; // 61999
+const METAMASK_MOBILE_DAPP = `https://metamask.app.link/dapp/${window.location.host}${window.location.pathname}`;
 
 type EvidenceStatus = "verified" | "pending" | "attention";
 
@@ -55,6 +59,50 @@ export default function Home() {
 
   const verifiedCount = useMemo(() => evidence.filter((item) => item.status === "verified").length, []);
 
+  const getWallet = () => window.ethereum;
+
+  const connectToStudionet = async (requestAccounts = true) => {
+    const ethereum = getWallet();
+
+    if (!ethereum) {
+      throw new Error(
+        `No browser wallet provider. Open this site in MetaMask Mobile: ${METAMASK_MOBILE_DAPP}`
+      );
+    }
+
+    // First read the currently selected account.
+    // This prevents unnecessary duplicate wallet popups.
+    let accounts = (await ethereum.request({
+      method: "eth_accounts"
+    })) as string[];
+
+    if ((!accounts || accounts.length === 0) && requestAccounts) {
+      accounts = (await ethereum.request({
+        method: "eth_requestAccounts"
+      })) as string[];
+    }
+
+    if (!accounts?.[0]) {
+      throw new Error("No wallet account selected.");
+    }
+
+    const address = accounts[0] as `0x${string}`;
+
+    const client = createClient({
+      chain: studionet,
+      account: address,
+      provider: ethereum,
+    });
+
+    // Connect to the exact GenLayer Studionet network.
+    await client.connect("studionet");
+
+    return {
+      client,
+      address
+    };
+  };
+
   const copyAddress = () => {
     setCopied(true);
     toast.success("Agreement reference copied", { description: "0x7a2e...a91c is ready to share." });
@@ -68,38 +116,153 @@ export default function Home() {
     toast.success("Agreement staged", { description: "Connect a GenLayer wallet to fund this agreement with test GEN." });
   };
 
+  useEffect(() => {
+    const ethereum = getWallet();
+
+    if (!ethereum) return;
+
+    const syncWallet = async () => {
+      try {
+        const accounts = (await ethereum.request({
+          method: "eth_accounts"
+        })) as string[];
+
+        if (accounts?.[0]) {
+          setWalletAddress(accounts[0]);
+        } else {
+          setWalletAddress(null);
+        }
+      } catch {
+        // Wallet availability is optional until user clicks Connect.
+      }
+    };
+
+    const onAccountsChanged = (accounts: string[]) => {
+      setWalletAddress(accounts?.[0] ?? null);
+      setTestnetTx(null);
+    };
+
+    const onChainChanged = () => {
+      void syncWallet();
+    };
+
+    void syncWallet();
+
+    ethereum.on?.("accountsChanged", onAccountsChanged);
+    ethereum.on?.("chainChanged", onChainChanged);
+
+    return () => {
+      ethereum.removeListener?.("accountsChanged", onAccountsChanged);
+      ethereum.removeListener?.("chainChanged", onChainChanged);
+    };
+  }, []);
+
   const connectWallet = async () => {
-    if (!window.ethereum) {
-      toast.error("Wallet not detected", { description: "Open FlowBond in MetaMask or another EVM wallet browser." });
-      return;
-    }
     setWalletBusy(true);
+
     try {
-      const accounts = (await window.ethereum.request({ method: "eth_requestAccounts" })) as string[];
-      const address = accounts[0] as `0x${string}`;
-      const client = createClient({ chain: studionet, account: address, provider: window.ethereum });
-      await client.connect("studionet");
-      setWalletAddress(accounts[0] ?? null);
-      toast.success("Wallet connected", { description: "GenLayer Studionet selected (Chain ID 61999)." });
+      const { address } = await connectToStudionet(true);
+
+      setWalletAddress(address);
+
+      toast.success(
+        "Wallet connected",
+        {
+          description: "GenLayer Studionet selected (Chain ID 61999)."
+        }
+      );
     } catch (error) {
-      toast.error("Wallet connection cancelled", { description: error instanceof Error ? error.message : "No wallet account was selected." });
+      const message =
+        error instanceof Error
+          ? error.message
+          : "The wallet connection was rejected.";
+
+      if (
+        message.includes("4001") ||
+        /reject|denied|cancel/i.test(message)
+      ) {
+        toast.error(
+          "Wallet connection cancelled",
+          {
+            description:
+              "Approve the account and network request in your wallet."
+          }
+        );
+      } else {
+        toast.error(
+          "Wallet connection failed",
+          {
+            description: message
+          }
+        );
+      }
     } finally {
       setWalletBusy(false);
     }
   };
 
   const sendTestnetPayment = async () => {
-    if (!walletAddress) return connectWallet();
     setWalletBusy(true);
+
     try {
-      const client = createClient({ chain: studionet, account: walletAddress as `0x${string}`, provider: window.ethereum });
-      await client.connect("studionet");
-      const write = { address: FLOWBOND_CONTRACT, functionName: "fund_agreement", args: [], value: BigInt("1000000000000000") };
-      const hash = await client.writeContract(write);
-      setTestnetTx(String(hash));
-      toast.success("GEN testnet funding submitted", { description: "The transaction is being processed by GenLayer consensus." });
+      const { client, address } = await connectToStudionet(true);
+
+      setWalletAddress(address);
+
+      const write = {
+        address: FLOWBOND_CONTRACT,
+        functionName: "fund_agreement",
+        args: [],
+        value: BigInt("1000000000000000")
+      };
+
+      let estimate: any = undefined;
+
+      try {
+        estimate =
+          await (client as any)
+            .estimateTransactionFeesForWrite?.(write);
+      } catch {
+        // Fee estimation failed; continue without it.
+        estimate = undefined;
+      }
+
+      // Submit exactly once.
+      // Never blindly retry writeContract because the wallet/network
+      // may already have accepted the transaction.
+      const hash = estimate
+        ? String(
+            await client.writeContract({
+              ...write,
+              fees: {
+                distribution: estimate.distribution,
+                feeValue: estimate.feeValue
+              }
+            })
+          )
+        : String(await client.writeContract(write));
+
+      setTestnetTx(hash);
+
+      toast.success(
+        "GEN testnet funding submitted",
+        {
+          description:
+            "The transaction is being processed by GenLayer consensus."
+        }
+      );
     } catch (error) {
-      toast.error("Testnet payment failed", { description: error instanceof Error ? error.message : "The wallet rejected the transaction." });
+      const message =
+        error instanceof Error
+          ? error.message
+          : "The wallet rejected the transaction.";
+
+      toast.error(
+        "Testnet payment failed",
+        {
+          description: message
+        }
+      );
     } finally {
       setWalletBusy(false);
     }
