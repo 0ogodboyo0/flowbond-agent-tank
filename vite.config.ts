@@ -240,3 +240,5 @@ export default defineConfig({
     },
   },
 });
+
+/* Termux/Android ARM64: avoid Lightning CSS native binary */

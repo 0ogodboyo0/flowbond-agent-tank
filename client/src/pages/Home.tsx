@@ -1,9 +1,10 @@
 // FlowBond style reminder: Trust Ledger design; evidence before assertion, editorial hierarchy, split-rail composition, chartreuse verified states, coral disputes, and no fabricated live settlement.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowUpRight, Check, ChevronRight, CircleAlert, Clock3, Copy, FileCheck2, GitBranch, LockKeyhole, Menu, Pause, Play, ShieldCheck, Sparkles, WalletCards, X } from "lucide-react";
 import { toast } from "sonner";
 import { createClient } from "genlayer-js";
 import { studionet } from "genlayer-js/chains";
+import { TransactionStatus } from "genlayer-js/types";
 
 declare global {
   interface Window {
@@ -23,31 +24,8 @@ const FLOWBOND_CONTRACT = "0x1Ae16B9E32eeFd1b604E9836886884A16F4aAC11" as `0x${s
 const STUDIONET_CHAIN_ID = "0xf22f"; // 61999
 const METAMASK_MOBILE_DAPP = `https://metamask.app.link/dapp/${window.location.host}${window.location.pathname}`;
 
-type EvidenceStatus = "verified" | "pending" | "attention";
-
-type Evidence = {
-  title: string;
-  detail: string;
-  status: EvidenceStatus;
-  icon: typeof FileCheck2;
-};
-
-const evidence: Evidence[] = [
-  { title: "Schema compliance", detail: "OpenAPI response matches v2.3 contract", status: "verified", icon: FileCheck2 },
-  { title: "Integration test", detail: "18 / 18 checks passed on the last run", status: "verified", icon: Check },
-  { title: "Availability window", detail: "Uptime signal is still being collected", status: "pending", icon: Clock3 },
-  { title: "Human review", detail: "Buyer requested a second look at edge cases", status: "attention", icon: CircleAlert },
-];
-
-const statusCopy = {
-  locked: { label: "Funds locked", color: "chartreuse", description: "Agreement is active. Settlement follows evidence." },
-  paused: { label: "Stream paused", color: "coral", description: "A dispute needs an accountable decision." },
-  released: { label: "Ready to release", color: "chartreuse", description: "The evidence threshold has been met." },
-};
-
 export default function Home() {
   const [activeTab, setActiveTab] = useState<"agreement" | "evidence" | "decision">("agreement");
-  const [streamState, setStreamState] = useState<keyof typeof statusCopy>("locked");
   const [mobileNav, setMobileNav] = useState(false);
   const [copied, setCopied] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
@@ -57,6 +35,10 @@ export default function Home() {
   const [agreement, setAgreement] = useState<any | null>(null);
   const [agreementLoading, setAgreementLoading] = useState(true);
   const [agreementError, setAgreementError] = useState<string | null>(null);
+  const [actionBusy, setActionBusy] = useState(false);
+  const [evidenceUri, setEvidenceUri] = useState("");
+  const [evidenceSummary, setEvidenceSummary] = useState("");
+  const [disputeReason, setDisputeReason] = useState("");
 
 
 
@@ -104,9 +86,6 @@ export default function Home() {
   };
 
   const [draft, setDraft] = useState({ promise: "", buyer: "", seller: "", budget: "480", criteria: "Schema compliance, integration tests" });
-  const current = statusCopy[streamState];
-
-  const verifiedCount = useMemo(() => evidence.filter((item) => item.status === "verified").length, []);
 
   const getWallet = () => window.ethereum;
 
@@ -157,17 +136,128 @@ export default function Home() {
     };
   };
 
+  const runContractAction = async (
+    functionName: string,
+    args: unknown[] = [],
+  ) => {
+    setActionBusy(true);
+
+    try {
+      const { client, address } = await connectToStudionet(true);
+      setWalletAddress(address);
+
+      const hash = String(
+        await (client as any).writeContract({
+          address: FLOWBOND_CONTRACT,
+          functionName,
+          args,
+        }),
+      );
+
+      setTestnetTx(hash);
+
+      toast.info(`${functionName} submitted`, {
+        description:
+          "Waiting for GenLayer consensus finalization...",
+      });
+
+      await (client as any).waitForTransactionReceipt({
+        hash,
+        status: TransactionStatus.FINALIZED,
+      });
+
+      toast.success(`${functionName} finalized`, {
+        description:
+          "The transaction reached FINALIZED status on GenLayer Studionet.",
+      });
+
+      await loadAgreement();
+
+      return hash;
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Transaction failed.";
+
+      toast.error(`${functionName} failed`, {
+        description: message,
+      });
+
+      throw error;
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
+  const submitEvidence = async () => {
+    const uri = evidenceUri.trim();
+    const summary = evidenceSummary.trim();
+
+    if (!uri.startsWith("https://")) {
+      toast.error("Invalid evidence URI", {
+        description: "Evidence URI must start with https://",
+      });
+      return;
+    }
+
+    if (summary.length < 20) {
+      toast.error("Evidence summary too short", {
+        description: "The evidence summary must contain at least 20 characters.",
+      });
+      return;
+    }
+
+    if (agreement?.decision === "DISPUTED") {
+      toast.error("Evidence submission blocked", {
+        description: "Close the active dispute before submitting new evidence.",
+      });
+      return;
+    }
+
+    return runContractAction("submit_evidence", [uri, summary]);
+  };
+
+  const adjudicateEvidence = async () => {
+    if (!agreement?.evidence_uri) {
+      toast.error("Evidence required", {
+        description:
+          "Submit an HTTPS evidence URI before adjudicating.",
+      });
+      return;
+    }
+
+    return runContractAction("adjudicate_evidence");
+  };
+
+  const pauseDispute = async () => {
+    const reason = disputeReason.trim();
+
+    if (reason.length < 10) {
+      toast.error("Dispute reason too short", {
+        description:
+          "The dispute reason must contain at least 10 characters.",
+      });
+      return;
+    }
+
+    return runContractAction("pause_dispute", [reason]);
+  };
+
+  const closeDispute = async () => {
+    return runContractAction("close_dispute");
+  };
+
   const copyAddress = () => {
     setCopied(true);
-    toast.success("Agreement reference copied", { description: "{FLOWBOND_CONTRACT.slice(0, 6)}...{FLOWBOND_CONTRACT.slice(-4)} is ready to share." });
+    toast.success("Agreement reference copied", { description: `${FLOWBOND_CONTRACT.slice(0, 6)}...${FLOWBOND_CONTRACT.slice(-4)} is ready to share.` });
     window.setTimeout(() => setCopied(false), 1800);
   };
 
   const createAgreement = () => {
-    setStreamState("locked");
-    setActiveTab("agreement");
     setCreateOpen(false);
-    toast.success("Agreement staged", { description: "Connect a GenLayer wallet to fund this agreement with test GEN." });
+    setActiveTab("agreement");
+    toast.info("Agreement builder", {
+      description: "The deployed FlowBond contract is the active public agreement. Deployment of new agreements is not enabled yet.",
+    });
   };
 
   useEffect(() => {
@@ -307,50 +397,49 @@ return () => {
 
     try {
       const { client, address } = await connectToStudionet(true);
-
       setWalletAddress(address);
 
       const write = {
         address: FLOWBOND_CONTRACT,
         functionName: "fund_agreement",
         args: [],
-        value: BigInt("1000000000000000")
+        value: BigInt("1000000000000000"),
       };
 
       const hash = String(
-      await client.writeContract(write)
-    );
-    setTestnetTx(hash);
-
-      toast.success(
-        "GEN testnet funding submitted",
-        {
-          description:
-            "The transaction is being processed by GenLayer consensus."
-        }
+        await client.writeContract(write),
       );
+
+      setTestnetTx(hash);
+
+      toast.info("GEN testnet funding submitted", {
+        description:
+          "Waiting for GenLayer consensus finalization...",
+      });
+
+      await (client as any).waitForTransactionReceipt({
+        hash,
+        status: TransactionStatus.FINALIZED,
+      });
+
+      toast.success("GEN testnet funding finalized", {
+        description:
+          "0.001 GEN funding is finalized on GenLayer Studionet.",
+      });
+
+      await loadAgreement();
     } catch (error) {
       const message =
         error instanceof Error
           ? error.message
-          : "The wallet rejected the transaction.";
+          : "The funding transaction failed.";
 
-      toast.error(
-        "Testnet payment failed",
-        {
-          description: message
-        }
-      );
+      toast.error("GEN testnet funding failed", {
+        description: message,
+      });
     } finally {
       setWalletBusy(false);
     }
-  };
-
-  const changeState = (next: keyof typeof statusCopy) => {
-    setStreamState(next);
-    toast(next === "paused" ? "Stream paused" : next === "released" ? "Release preview ready" : "Agreement active", {
-      description: next === "paused" ? "The dispute path is now visible to both parties." : "This is a prototype state transition; no funds move here.",
-    });
   };
 
   return (
@@ -399,7 +488,7 @@ return () => {
         </div>
       </section>
 
-      <section className="mx-auto max-w-[1440px] px-5 py-8 lg:px-8 lg:py-12"><div className="ledger-spine mb-10 grid grid-cols-2 gap-3 border-y border-white/10 py-4 sm:grid-cols-4"><div className="ledger-cell ledger-cell-active"><span>01</span><strong>Agreement</strong><small>promise locked</small></div><div className="ledger-cell"><span>02</span><strong>Evidence</strong><small>{verifiedCount} signals verified</small></div><div className="ledger-cell"><span>03</span><strong>Decision</strong><small>validator-ready</small></div><div className="ledger-cell"><span>04</span><strong>Settlement</strong><small>state preview</small></div></div><div className="grid gap-6 lg:grid-cols-[210px_1fr_320px]">
+      <section className="mx-auto max-w-[1440px] px-5 py-8 lg:px-8 lg:py-12"><div className="ledger-spine mb-10 grid grid-cols-2 gap-3 border-y border-white/10 py-4 sm:grid-cols-4"><div className="ledger-cell ledger-cell-active"><span>01</span><strong>Agreement</strong><small>promise locked</small></div><div className="ledger-cell"><span>02</span><strong>Evidence</strong><small>{agreement?.evidence_uri ? "evidence submitted" : "awaiting evidence"}</small></div><div className="ledger-cell"><span>03</span><strong>Decision</strong><small>validator-ready</small></div><div className="ledger-cell"><span>04</span><strong>Settlement</strong><small>{agreement?.settlement_status || "loading state"}</small></div></div><div className="grid gap-6 lg:grid-cols-[210px_1fr_320px]">
         <aside className="hidden border-r border-white/10 pr-6 lg:block">
           <p className="font-mono text-[9px] uppercase tracking-[0.25em] text-white/35">Live agreement</p>
           <div className="mt-8 space-y-6">
@@ -409,14 +498,26 @@ return () => {
         </aside>
 
         <div className="min-w-0">
-          <div className="mb-6 flex items-end justify-between gap-4"><div><p className="font-mono text-[9px] uppercase tracking-[0.25em] text-chartreuse">01 / Agreement state</p><h2 className="mt-2 font-display text-3xl font-bold tracking-[-0.04em] text-bone sm:text-4xl">The promise, made legible.</h2></div><span className={`hidden rounded-full border px-3 py-1.5 font-mono text-[9px] uppercase tracking-[0.15em] sm:inline-flex ${streamState === "paused" ? "border-coral/40 bg-coral/10 text-coral" : "border-chartreuse/35 bg-chartreuse/10 text-chartreuse"}`}>{current.label}</span></div>
+          <div className="mb-6 flex items-end justify-between gap-4"><div><p className="font-mono text-[9px] uppercase tracking-[0.25em] text-chartreuse">01 / Agreement state</p><h2 className="mt-2 font-display text-3xl font-bold tracking-[-0.04em] text-bone sm:text-4xl">The promise, made legible.</h2></div><span className={`hidden rounded-full border px-3 py-1.5 font-mono text-[9px] uppercase tracking-[0.15em] sm:inline-flex ${agreement?.decision === "DISPUTED" ? "border-coral/40 bg-coral/10 text-coral" : "border-chartreuse/35 bg-chartreuse/10 text-chartreuse"}`}>{agreement?.decision || "LOADING"}</span></div>
           <div className="relative overflow-hidden rounded-xl border border-white/10 bg-ocean/70 p-5 shadow-2xl shadow-black/20 sm:p-7">
             <div className="absolute right-0 top-0 h-32 w-32 bg-[radial-gradient(circle,rgba(199,243,107,0.12),transparent_65%)]" />
-            {activeTab === "agreement" && <div className="relative"><div className="grid gap-8 sm:grid-cols-[1fr_0.8fr]"><div><div className="flex items-center gap-3"><div className="grid h-11 w-11 place-items-center rounded-lg border border-chartreuse/30 bg-chartreuse/10 text-chartreuse"><LockKeyhole size={20} /></div><div><p className="font-mono text-[9px] uppercase tracking-[0.2em] text-white/40">Service agreement</p><h3 className="mt-1 font-display text-xl font-bold">{agreement?.service_promise || "FlowBond agreement"}</h3></div></div><p className="mt-7 max-w-[470px] text-sm leading-6 text-white/60">“Deliver an {agreement?.service_promise || "FlowBond agreement"} with schema checks and reproducible integration tests. Payment continues while the agreed evidence remains green.”</p><div className="mt-7 flex flex-wrap gap-2"><span className="proof-chip"><GitBranch size={12} /> schema / v2.3</span><span className="proof-chip"><ShieldCheck size={12} /> evidence-led</span><span className="proof-chip"><Sparkles size={12} /> GenLayer ready</span></div></div><div className="space-y-5 border-t border-white/10 pt-5 sm:border-l sm:border-t-0 sm:pl-7 sm:pt-0"><div><p className="meta-label">Buyer agent</p><p className="mt-1 font-mono text-sm text-bone">{agreement?.buyer_agent || "—"}</p></div><div><p className="meta-label">Seller agent</p><p className="mt-1 font-mono text-sm text-bone">{agreement?.seller_agent || "—"}</p></div><div><p className="meta-label">Budget horizon</p><p className="mt-1 font-display text-2xl font-bold text-chartreuse">{agreement?.budget_cap || "—"} <span className="font-mono text-[10px] font-normal text-white/40">USDC / capped</span></p></div></div></div></div>}
-            {activeTab === "evidence" && <div className="relative"><div className="grid gap-6 sm:grid-cols-[1fr_0.85fr]"><div><p className="meta-label">Collected evidence / 04 signals</p><div className="mt-4 space-y-2">{evidence.map((item) => { const Icon = item.icon; return <div key={item.title} className="flex items-center gap-3 rounded-lg border border-white/8 bg-black/10 px-3 py-3"><div className={`grid h-8 w-8 place-items-center rounded-md ${item.status === "verified" ? "bg-chartreuse/10 text-chartreuse" : item.status === "attention" ? "bg-coral/10 text-coral" : "bg-white/8 text-white/45"}`}><Icon size={15} /></div><div className="min-w-0 flex-1"><p className="text-sm font-medium text-bone">{item.title}</p><p className="mt-0.5 truncate text-xs text-white/45">{item.detail}</p></div><span className="font-mono text-[9px] uppercase tracking-[0.15em] text-white/35">{item.status}</span></div>})}</div></div><div className="overflow-hidden rounded-lg border border-white/10 bg-ink"><img src={evidenceImage} alt="Abstract evidence review card" className="h-full min-h-[220px] w-full object-cover opacity-90" /></div></div></div>}
-            {activeTab === "decision" && <div className="relative"><div className="grid gap-8 sm:grid-cols-[0.9fr_1.1fr]"><div><p className="meta-label">Decision preview</p><div className={`mt-4 flex items-center gap-3 rounded-lg border p-4 ${streamState === "paused" ? "border-coral/35 bg-coral/10" : "border-chartreuse/35 bg-chartreuse/10"}`}><div className={`grid h-11 w-11 place-items-center rounded-full ${streamState === "paused" ? "bg-coral text-ink" : "bg-chartreuse text-ink"}`}>{streamState === "paused" ? <Pause size={18} /> : <Check size={18} />}</div><div><p className="font-display text-xl font-bold">{current.label}</p><p className="mt-1 text-xs text-white/55">{current.description}</p></div></div><div className="mt-6 flex flex-wrap gap-2"><button onClick={() => changeState("locked")} className="state-button"><LockKeyhole size={13} /> Lock</button><button onClick={() => changeState("paused")} className="state-button"><Pause size={13} /> Pause</button><button onClick={() => changeState("released")} className="state-button"><Play size={13} /> Release preview</button></div></div><div className="flex min-h-[240px] items-center justify-center rounded-lg border border-white/10 bg-ink/80 p-4"><img src={horizonImage} alt="FlowBond settlement horizon" className="max-h-[240px] w-full object-cover opacity-90" /></div></div><div className="mt-8 border-t border-white/10 pt-5"><p className="font-mono text-[10px] uppercase tracking-[0.15em] text-white/45">GenLayer testnet boundary</p><p className="mt-2 text-sm leading-6 text-white/55">Wallet connection and GEN funding use GenLayer Studionet. Mainnet, escrow release, and production settlement remain disabled.</p></div></div>}
-          </div>
-          <div className="mt-5 flex flex-wrap items-center justify-between gap-3"><p className="text-xs text-white/40"><span className="text-chartreuse">{verifiedCount} verified</span> / {evidence.length} evidence signals <span className="mx-2 text-white/15">•</span> updated 4 min ago</p><button onClick={() => setActiveTab(activeTab === "agreement" ? "evidence" : activeTab === "evidence" ? "decision" : "agreement")} className="inline-flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.16em] text-white/60 hover:text-chartreuse">Next view <ArrowUpRight size={14} /></button></div>
+            {activeTab === "agreement" && <div className="relative"><div className="grid gap-8 sm:grid-cols-[1fr_0.8fr]"><div><div className="flex items-center gap-3"><div className="grid h-11 w-11 place-items-center rounded-lg border border-chartreuse/30 bg-chartreuse/10 text-chartreuse"><LockKeyhole size={20} /></div><div><p className="font-mono text-[9px] uppercase tracking-[0.2em] text-white/40">Service agreement</p><h3 className="mt-1 font-display text-xl font-bold">{agreement?.service_promise || "FlowBond agreement"}</h3></div></div><p className="mt-7 max-w-[470px] text-sm leading-6 text-white/60">“Deliver an {agreement?.service_promise || "FlowBond agreement"} with schema checks and reproducible integration tests. Payment continues while the agreed evidence remains green.”</p><div className="mt-7 flex flex-wrap gap-2"><span className="proof-chip"><GitBranch size={12} /> schema / v2.3</span><span className="proof-chip"><ShieldCheck size={12} /> evidence-led</span><span className="proof-chip"><Sparkles size={12} /> GenLayer ready</span></div></div><div className="space-y-5 border-t border-white/10 pt-5 sm:border-l sm:border-t-0 sm:pl-7 sm:pt-0"><div><p className="meta-label">Buyer agent</p><p className="mt-1 font-mono text-sm text-bone">{agreement?.buyer_agent || "—"}</p></div><div><p className="meta-label">Seller agent</p><p className="mt-1 font-mono text-sm text-bone">{agreement?.seller_agent || "—"}</p></div><div><p className="meta-label">Budget horizon</p><p className="mt-1 font-display text-2xl font-bold text-chartreuse">{agreement?.budget_cap || "—"} <span className="font-mono text-[10px] font-normal text-white/40">GEN / capped</span></p></div></div></div></div>}
+            {activeTab === "evidence" && <div className="relative"><div className="grid gap-6 sm:grid-cols-[1fr_0.85fr]"><div><p className="meta-label">Submit evidence / on-chain</p><div className="mt-4 space-y-3"><div className="rounded-lg border border-white/10 bg-black/10 p-4"><p className="font-mono text-[9px] uppercase tracking-[0.15em] text-white/35">Evidence URI</p><input value={evidenceUri} onChange={(event) => setEvidenceUri(event.target.value)} placeholder="https://example.com/evidence" className="mt-3 w-full rounded-md border border-white/10 bg-black/20 px-3 py-3 text-sm text-bone outline-none placeholder:text-white/25 focus:border-chartreuse/50" type="url" /></div><div className="rounded-lg border border-white/10 bg-black/10 p-4"><p className="font-mono text-[9px] uppercase tracking-[0.15em] text-white/35">Evidence summary</p><textarea value={evidenceSummary} onChange={(event) => setEvidenceSummary(event.target.value)} placeholder="Describe the evidence and how it satisfies the agreement criteria..." className="mt-3 min-h-[120px] w-full resize-y rounded-md border border-white/10 bg-black/20 px-3 py-3 text-sm leading-6 text-bone outline-none placeholder:text-white/25 focus:border-chartreuse/50" /></div><button onClick={submitEvidence} disabled={actionBusy || !walletAddress} className="inline-flex items-center gap-2 rounded-md bg-chartreuse px-4 py-3 font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-ink disabled:cursor-not-allowed disabled:opacity-50"><FileCheck2 size={14} /> {walletAddress ? "Submit evidence on-chain" : "Connect wallet to submit"}</button><div className="rounded-lg border border-white/10 bg-black/10 p-4"><p className="font-mono text-[9px] uppercase tracking-[0.15em] text-white/35">Current on-chain evidence</p><p className="mt-2 break-all text-sm text-bone">{agreement?.evidence_uri || "No evidence submitted yet."}</p>{agreement?.evidence_summary && <p className="mt-2 text-sm leading-6 text-white/55">{agreement.evidence_summary}</p>}</div><div className="rounded-lg border border-white/10 bg-black/10 p-4"><p className="font-mono text-[9px] uppercase tracking-[0.15em] text-white/35">Criteria</p><p className="mt-2 text-sm leading-6 text-white/65">{agreement?.evidence_criteria || "—"}</p></div></div></div><div className="overflow-hidden rounded-lg border border-white/10 bg-ink"><img src={evidenceImage} alt="Abstract evidence review card" className="h-full min-h-[220px] w-full object-cover opacity-90" /></div></div></div>}
+            {activeTab === "decision" && <div className="relative"><div className="grid gap-8 sm:grid-cols-[0.9fr_1.1fr]"><div><p className="meta-label">Decision / on-chain consensus</p><div className="mt-4 rounded-lg border border-white/10 bg-black/10 p-4"><p className="font-display text-2xl font-bold text-bone">{agreement?.decision || "—"}</p><p className="mt-2 text-sm leading-6 text-white/55">{agreement?.decision_reason || "—"}</p></div><div className="mt-4 rounded-lg border border-white/10 bg-black/10 p-4"><p className="font-mono text-[9px] uppercase tracking-[0.15em] text-white/35">Dispute status</p><p className="mt-2 text-sm font-medium text-bone">{agreement?.dispute_status || "—"}</p>{agreement?.dispute_reason && <p className="mt-2 text-sm text-white/55">{agreement.dispute_reason}</p>}</div><div className="mt-5 rounded-lg border border-white/10 bg-black/10 p-4">
+<p className="font-mono text-[9px] uppercase tracking-[0.15em] text-white/35">Dispute reason / on-chain</p>
+<textarea
+  value={disputeReason}
+  onChange={(event) => setDisputeReason(event.target.value)}
+  placeholder="Explain why this agreement should be paused for dispute review..."
+  className="mt-3 min-h-[100px] w-full resize-y rounded-md border border-white/10 bg-black/20 px-3 py-3 text-sm leading-6 text-bone outline-none placeholder:text-white/25 focus:border-chartreuse/50"
+/>
+<p className="mt-2 font-mono text-[9px] text-white/30">Minimum 10 characters. This text will be written to the contract.</p>
+</div>
+<div className="mt-5 flex flex-wrap gap-2">
+<button disabled={actionBusy || !walletAddress} onClick={adjudicateEvidence} className="state-button"><ShieldCheck size={13} /> Adjudicate</button>
+<button disabled={actionBusy || !walletAddress || disputeReason.trim().length < 10} onClick={pauseDispute} className="state-button"><Pause size={13} /> Pause dispute</button>
+<button disabled={actionBusy || !walletAddress} onClick={closeDispute} className="state-button"><Play size={13} /> Close dispute</button>
+</div></div><div className="flex min-h-[240px] items-center justify-center rounded-lg border border-white/10 bg-ink/80 p-4"><img src={horizonImage} alt="FlowBond settlement horizon" className="max-h-[240px] w-full object-cover opacity-90" /></div></div><div className="mt-8 border-t border-white/10 pt-5"><p className="font-mono text-[10px] uppercase tracking-[0.15em] text-white/45">GenLayer testnet boundary</p><p className="mt-2 text-sm leading-6 text-white/55">Decision and dispute actions are real GenLayer Studionet contract transactions. RELEASE_READY means ready for future settlement; this demo does not transfer funds to a seller.</p></div></div>}          <div className="mt-5 flex flex-wrap items-center justify-between gap-3"><p className="text-xs text-white/40"><span className="text-chartreuse">{agreement?.evidence_uri ? "1 evidence submission" : "0 evidence submissions"}</span> <span className="mx-2 text-white/15">•</span> live contract state</p><button onClick={() => setActiveTab(activeTab === "agreement" ? "evidence" : activeTab === "evidence" ? "decision" : "agreement")} className="inline-flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.16em] text-white/60 hover:text-chartreuse">Next view <ArrowUpRight size={14} /></button></div>
         </div>
 
         <aside className="space-y-4" id="decision">
@@ -426,9 +527,15 @@ return () => {
             <button onClick={sendTestnetPayment} disabled={walletBusy} className="mt-4 inline-flex items-center gap-2 rounded-md bg-chartreuse px-4 py-3 font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-ink disabled:opacity-60"><WalletCards size={14} /> {walletAddress ? "Fund with 0.001 GEN" : "Connect GenLayer wallet"}</button>
             {testnetTx && <a className="mt-3 block truncate font-mono text-[9px] text-chartreuse underline" href={`https://explorer-studio.genlayer.com/tx/${testnetTx}`} target="_blank" rel="noreferrer">View GenLayer transaction</a>}
           </div>
-          <div className="rounded-xl border border-white/10 bg-bone p-5 text-ink"><div className="flex items-center justify-between"><p className="font-mono text-[9px] uppercase tracking-[0.22em] text-ink/55">Settlement horizon</p><span className="h-2 w-2 rounded-full bg-chartreuse shadow-[0_0_0_4px_rgba(199,243,107,0.18)]" /></div><div className="mt-7 flex items-end justify-between"><div><p className="font-mono text-[9px] uppercase tracking-[0.2em] text-ink/50">Locked budget</p><p className="mt-1 font-display text-4xl font-bold tracking-[-0.06em]">{agreement?.budget_cap || "—"}</p></div><p className="font-mono text-xs text-ink/50">USDC</p></div><div className="mt-6 h-2 overflow-hidden rounded-full bg-ink/10"><div className={`h-full rounded-full bg-ink transition-all duration-500 ${streamState === "paused" ? "w-[42%]" : streamState === "released" ? "w-full" : "w-[68%]"}`} /></div><div className="mt-3 flex justify-between font-mono text-[9px] uppercase tracking-[0.15em] text-ink/45"><span>locked</span><span>{streamState === "paused" ? "paused" : streamState === "released" ? "released" : "evidence"}</span></div><button onClick={() => setActiveTab("decision")} className="mt-7 flex w-full items-center justify-between border-t border-ink/15 pt-4 text-left font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-ink">Open decision path <ArrowUpRight size={15} /></button></div>
+          <div className="rounded-xl border border-white/10 bg-bone p-5 text-ink"><div className="flex items-center justify-between"><p className="font-mono text-[9px] uppercase tracking-[0.22em] text-ink/55">Settlement horizon</p><span className="h-2 w-2 rounded-full bg-chartreuse shadow-[0_0_0_4px_rgba(199,243,107,0.18)]" /></div><div className="mt-7 flex items-end justify-between"><div><p className="font-mono text-[9px] uppercase tracking-[0.2em] text-ink/50">Locked budget</p><p className="mt-1 font-display text-4xl font-bold tracking-[-0.06em]">{agreement?.budget_cap || "—"}</p></div><p className="font-mono text-xs text-ink/50">GEN</p></div><div className="mt-6 rounded-md border border-ink/15 bg-ink/5 px-3 py-3">
+  <div className="flex items-center justify-between gap-3">
+    <span className="font-mono text-[9px] uppercase tracking-[0.15em] text-ink/45">On-chain settlement state</span>
+    <span className="font-mono text-[9px] font-bold uppercase tracking-[0.12em] text-ink">{agreement?.settlement_status || "UNKNOWN"}</span>
+  </div>
+</div><div className="mt-3 flex justify-between font-mono text-[9px] uppercase tracking-[0.15em] text-ink/45"><span>locked</span><span>{agreement?.settlement_status || "unknown"}</span></div><button onClick={() => setActiveTab("decision")} className="mt-7 flex w-full items-center justify-between border-t border-ink/15 pt-4 text-left font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-ink">Open decision path <ArrowUpRight size={15} /></button></div>
           <div className="rounded-xl border border-white/10 bg-ocean/80 p-5"><p className="font-mono text-[9px] uppercase tracking-[0.22em] text-white/40">Why FlowBond</p><h3 className="mt-3 font-display text-2xl font-bold leading-tight">Make the promise machine-checkable.</h3><p className="mt-3 text-sm leading-6 text-white/55">Agents can call APIs and move money. FlowBond gives them a shared language for proof, pause, and accountable settlement.</p><a href="#agreement" className="mt-6 inline-flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.16em] text-chartreuse hover:underline">Read the agreement <ChevronRight size={14} /></a></div>
         </aside>
+        </div>
         </div>
       </section>
 
